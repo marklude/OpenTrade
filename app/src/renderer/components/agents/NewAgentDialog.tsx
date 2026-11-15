@@ -1,4 +1,4 @@
-import type { ApprovalMode, HarnessId } from "@shared/agent";
+import { type ApprovalMode, type HarnessId, harnessLabel } from "@shared/agent";
 import {
   ArrowUp,
   Check,
@@ -114,9 +114,10 @@ function NewAgentForm() {
   const [name, setName] = useState("");
   const [template, setTemplate] = useState("default");
   const [harness, setHarness] = useState<HarnessId>("claude");
-  // CLI availability drives the picker: a missing codex install is shown but disabled.
+  // CLI availability drives the picker: a missing codex/agy install is shown but disabled.
   const probes = trpc.onboarding.harnesses.useQuery(undefined, { staleTime: 60_000 });
   const codexFound = probes.data?.codex.found ?? false;
+  const agyFound = probes.data?.agy.found ?? false;
   const harnessOptions: PickerOption[] = [
     {
       value: "claude",
@@ -130,6 +131,13 @@ function NewAgentForm() {
       // Keep the "not found" note — it explains why the option is disabled.
       hint: codexFound ? undefined : "codex CLI not found",
       disabled: !codexFound,
+    },
+    {
+      value: "agy",
+      icon: <HarnessGlyph harness="agy" />,
+      label: "Antigravity",
+      hint: agyFound ? undefined : "agy CLI not found",
+      disabled: !agyFound,
     },
   ];
   const [environment, setEnvironment] = useState<Environment>("local");
@@ -183,11 +191,11 @@ function NewAgentForm() {
         className="border-transparent bg-transparent px-1 text-base font-medium shadow-none placeholder:text-muted-foreground/40 focus-visible:border-transparent"
       />
 
-      {/* CLAUDE.md specialty editor */}
+      {/* CLAUDE.md / AGENTS.md specialty editor */}
       <div className="flex flex-col rounded-lg border border-border bg-foreground/[0.02]">
         <div className="flex items-center gap-1.5 border-b border-border/60 px-3.5 py-2 font-mono text-[11px] font-medium text-muted-foreground">
           <FileText className="size-3" />
-          {harness === "codex" ? "AGENTS.md" : "CLAUDE.md"}
+          {harness === "claude" ? "CLAUDE.md" : "AGENTS.md"}
         </div>
         <Textarea
           value={claudeMd}
@@ -227,7 +235,7 @@ function NewAgentForm() {
           />
           <PickerPill
             icon={<HarnessGlyph harness={harness} />}
-            label={harness === "codex" ? "Codex" : "Claude Code"}
+            label={harnessLabel(harness)}
             options={harnessOptions}
             value={harness}
             onValueChange={(v) => setHarness(v as HarnessId)}

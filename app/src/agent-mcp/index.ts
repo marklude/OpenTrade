@@ -292,10 +292,10 @@ async function handle(msg: JsonRpcMessage): Promise<void> {
     }
     case "notifications/initialized":
       // The session is live — start the warm-wake poll loop. Claude only: under a
-      // codex harness there is no channel to push into (wakes arrive via the agent's
-      // app-server, and a served poll here would silently EAT the wake), so the
-      // poller stays off. The env flag rides the codex config's MCP entry.
-      if (process.env.OPENTRADE_HARNESS !== "codex") startWakePoller();
+      // codex or agy harness there is no channel to push into (wakes arrive via the
+      // app-server or agy interactive/headless transport, and a served poll here would
+      // silently EAT the wake), so the poller stays off.
+      if (process.env.OPENTRADE_HARNESS !== "codex" && process.env.OPENTRADE_HARNESS !== "agy") startWakePoller();
       return;
     case "notifications/cancelled":
       return; // no-op notification

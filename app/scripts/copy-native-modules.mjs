@@ -29,6 +29,7 @@
 // build) and BEFORE electron-builder — wired as the `prepackage` npm script.
 
 import {
+  chmodSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -134,6 +135,16 @@ for (const name of ENTRY_POINTS) {
   rmSync(link, { recursive: true, force: true }); // remove just the symlink (rmSync uses lstat, so it unlinks the symlink itself rather than following it; recursive+force keeps it working on Node ≥24, where a bare rmSync on a symlink-to-dir throws EISDIR)
   materialize(name, real, link);
   if (name === "koffi") bundleKoffiBinary(real, link);
+  if (name === "node-pty") {
+    for (const sub of ["build/Release", "prebuilds/darwin-arm64", "prebuilds/darwin-x64"]) {
+      const helper = join(link, sub, "spawn-helper");
+      if (existsSync(helper)) {
+        try {
+          chmodSync(helper, 0o755);
+        } catch {}
+      }
+    }
+  }
 }
 
 console.log("[copy-native] done");

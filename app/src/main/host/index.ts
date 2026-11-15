@@ -12,8 +12,25 @@
 
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import { delimiter, join } from "node:path";
 import { isPrereleaseVersion } from "@shared/updater";
 import { createDb, OPENTRADE_HOME } from "../db/client";
+
+// Ensure process.env.PATH includes standard binary directories so C-level posix_spawnp
+// (node-pty) finds CLI executables when OpenTrade is launched via GUI / Finder.
+const home = homedir();
+const standardBinDirs = [
+  join(OPENTRADE_HOME, "bin"),
+  join(home, ".local", "bin"),
+  join(home, ".volta", "bin"),
+  join(home, ".bun", "bin"),
+  join(home, "bin"),
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+];
+const currentPath = process.env.PATH ?? "";
+process.env.PATH = [...new Set([...standardBinDirs, ...currentPath.split(delimiter)])].filter(Boolean).join(delimiter);
 import { AgentRegistry } from "../services/agents/registry";
 import { analytics } from "../services/analytics";
 import { ApprovalService } from "../services/approvals";

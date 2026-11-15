@@ -240,7 +240,16 @@ export class LocalApiServer {
       if (event === "Notification" || turnEnded) {
         this.registry.markAgentTurn(agentId);
       }
-      if (event === "Notification") {
+      if (event === "SessionStart") {
+        const sessionId = body?.session_id ?? body?.conversationId;
+        if (
+          (agent.harness === "claude" || agent.harness === "agy") &&
+          typeof sessionId === "string" &&
+          sessionId
+        ) {
+          this.registry.setLastSessionId(agentId, sessionId);
+        }
+      } else if (event === "Notification") {
         this.deps.arbiter.setNeedsInput(agentId, true);
       } else if (turnEnded) {
         this.deps.arbiter.setNeedsInput(agentId, false);
@@ -248,12 +257,16 @@ export class LocalApiServer {
         // row (§12.2). No-op when no wake is outstanding (a plain user turn).
         if (event === "Stop") this.wake?.onTurnEnded(agentId);
         else this.wake?.onTurnFailed(agentId, categoryForStopFailure(String(body?.error ?? "")));
-        // Session capture is claude-only: for codex, `lastSessionId` is the
+        // Session capture is claude/agy-only: for codex, `lastSessionId` is the
         // app-server THREAD id (minted by thread/start and adopted from the TUI,
         // §13) — codex's hook `session_id` is not verified to match it, and an
         // overwrite here would break `thread/resume` for every later wake.
-        const sessionId = body?.session_id;
-        if (agent.harness === "claude" && typeof sessionId === "string" && sessionId) {
+        const sessionId = body?.session_id ?? body?.conversationId;
+        if (
+          (agent.harness === "claude" || agent.harness === "agy") &&
+          typeof sessionId === "string" &&
+          sessionId
+        ) {
           this.registry.setLastSessionId(agentId, sessionId);
         }
       }

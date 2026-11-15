@@ -30,6 +30,8 @@ export interface Session {
   exitSignal: number | null;
   /** Live subscribers (unix-socket clients and WebSocket connections). */
   sinks: Set<SessionSink>;
+  /** Called before a human terminal write, so automated wakes preserve drafts. */
+  onUserInput?: (data: string) => void;
 }
 
 /**

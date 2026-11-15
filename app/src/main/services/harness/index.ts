@@ -1,4 +1,5 @@
 import type { HarnessId } from "@shared/agent";
+import { agyHarness } from "./agy";
 import { claudeHarness } from "./claude";
 import type { Harness } from "./types";
 
@@ -12,6 +13,7 @@ export type { Harness, ProbeResult, SessionMode } from "./types";
  */
 const HARNESSES: Partial<Record<HarnessId, Harness>> = {
   claude: claudeHarness,
+  agy: agyHarness,
 };
 
 /** Register a harness built at host wiring (codex needs its app-server manager). */

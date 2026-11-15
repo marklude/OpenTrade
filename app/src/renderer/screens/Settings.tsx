@@ -564,6 +564,15 @@ function AboutPanel() {
               : "Not found"}
         </span>
       </SettingsRow>
+      <SettingsRow label="Antigravity CLI" hint="Runs agents created with the Antigravity harness.">
+        <span className="text-sm text-muted-foreground">
+          {harnesses.isLoading
+            ? "checking…"
+            : harnesses.data?.agy.found
+              ? harnesses.data.agy.version
+              : "Not found"}
+        </span>
+      </SettingsRow>
       <SettingsRow label="Data directory">
         <Tooltip>
           <TooltipTrigger asChild>

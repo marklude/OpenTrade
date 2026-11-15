@@ -1,4 +1,4 @@
-import type { Agent } from "@shared/agent";
+import { type Agent, harnessLabel } from "@shared/agent";
 import { Bot, Hourglass, RotateCw, ShieldCheck, Zap } from "lucide-react";
 import { type CSSProperties, useEffect, useRef } from "react";
 import { useSettings } from "../../hooks/useSettings";
@@ -68,7 +68,7 @@ export function TerminalPane({ agent }: { agent: Agent | null }) {
                   <HarnessGlyph harness={agent.harness} className="size-3" />
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{agent.harness === "codex" ? "Codex" : "Claude Code"}</TooltipContent>
+              <TooltipContent>{harnessLabel(agent.harness)}</TooltipContent>
             </Tooltip>
           )}
           {agent ? agent.name : "OpenTrade"}

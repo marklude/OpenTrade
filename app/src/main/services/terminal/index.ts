@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Agent, ExecutionState } from "@shared/agent";
+import { hostLog } from "../../host/log";
 import { TerminalWsServer } from "../../pty-daemon/ws-server";
 import { buildTerminalWsUrl } from "../../pty-daemon/ws-url";
 import type { AgentRegistry } from "../agents/registry";
@@ -10,6 +11,7 @@ import type { LocalApiServer } from "../local-api";
 import type { InteractivePush, WakeTransport } from "../scheduler/wake/types";
 import type { StatusArbiter } from "../status/arbiter";
 import { buildAgentEnv } from "./env";
+import { createAgyInteractiveDelivery, readAgyTranscript } from "./agy-interactive";
 import { TerminalManager } from "./manager";
 
 const DEFAULT_COLS = 120;
@@ -45,6 +47,7 @@ interface LaunchInfo {
  */
 export class TerminalService {
   private manager = new TerminalManager();
+  private agyDelivery = new Map<string, ReturnType<typeof createAgyInteractiveDelivery>>();
   private wsServer: TerminalWsServer;
   private idleTimers = new Map<string, NodeJS.Timeout>();
   /** Most recent launch per session, to detect a dead `--resume` resume. */
@@ -71,12 +74,26 @@ export class TerminalService {
     this.wsServer = new TerminalWsServer(this.manager.store, this.localApi.token);
     this.manager.on("output", ({ id }: { id: string }) => this.markWorking(id));
     this.manager.on("exit", ({ id }: { id: string }) => {
-      this.clearIdleTimer(id);
-      this.arbiter.setPty(id, "idle");
-      // A dead `--resume` is transparently respawned (the writer stays up); otherwise the
-      // interactive writer is gone — tell the coordinator so it re-routes queued wakes
-      // (now eligible to run headless) and republishes `executionState`.
-      if (!this.maybeRespawnFresh(id)) this.wake.onInteractiveDown(id);
+      // An old PTY can report exit after an explicit restart opened its replacement.
+      if (this.manager.isLive(id)) return;
+      const delivery = this.agyDelivery.get(id);
+      const finished = (result?: { deliveryUncertain: boolean }) => {
+        // dispose() yields while looking for the final native acknowledgment.
+        // A replacement writer must never be cleared by the old exit callback.
+        if (this.manager.isLive(id) || this.agyDelivery.get(id) !== delivery) return;
+        if (delivery) this.agyDelivery.delete(id);
+        this.clearIdleTimer(id);
+        this.arbiter.setPty(id, "idle");
+        // A written but unacknowledged wake cannot safely be resubmitted to
+        // the headless route. Quarantine queued work, surface attention and
+        // preserve the conversation for inspection; no broker action is taken.
+        if (result?.deliveryUncertain) this.quarantineAgyWake(id);
+        // AGY owns its conversation identity. A failed resume must not fall
+        // through the generic fresh-session fallback and discard that history.
+        if (delivery || !this.maybeRespawnFresh(id)) this.wake.onInteractiveDown(id);
+      };
+      if (delivery) void delivery.dispose().then(finished, () => finished({ deliveryUncertain: true }));
+      else finished();
     });
     // The GUI went away (window-close / Cmd-Q / crash, detected host-side) → blanket-kill
     // every interactive PTY so none is maintained outside the GUI (EC5/BUG-1). Quitting
@@ -127,6 +144,17 @@ export class TerminalService {
     return { alive: true, state: "interactive" };
   }
 
+  private quarantineAgyWake(agentId: string): void {
+    this.wake.stop(agentId); // interactive single-writer state: clears queue only
+    hostLog.warn("Antigravity wake delivery uncertain; queued work requires review", agentId);
+    bus.emitEvent("notify", {
+      kind: "restricted",
+      title: "Antigravity wake needs review",
+      body: "A submitted wake was not acknowledged before the session closed. Queued work was stopped to prevent duplicate execution. Review the existing conversation to determine whether that wake ran.",
+      agentId,
+    });
+  }
+
   /**
    * Spawn the agent's interactive PTY (its harness CLI). OpenTrade owns the
    * session id (I3): it mints a UUID at first start and resumes it thereafter;
@@ -145,6 +173,19 @@ export class TerminalService {
     cols: number,
     rows: number,
   ): Promise<void> {
+    // Settle a retired AGY writer before a replacement can claim its queue.
+    // This preserves acknowledgment uncertainty across an explicit reopen/restart.
+    const previousDelivery = this.agyDelivery.get(agent.id);
+    if (previousDelivery) {
+      const result = await previousDelivery.dispose();
+      if (this.agyDelivery.get(agent.id) === previousDelivery) {
+        if (result.deliveryUncertain) this.quarantineAgyWake(agent.id);
+        this.agyDelivery.delete(agent.id);
+      }
+    }
+    if (this.registry.executionStateOf(agent.id) === "headless") {
+      throw new Error("A scheduled wake is already using this conversation");
+    }
     const dir = this.registry.agentDir(agent);
     const harness = harnessFor(agent.harness);
     // Self-heal the harness's generated config (codex: config.toml, hooks, gate
@@ -210,11 +251,31 @@ export class TerminalService {
     });
     this.manager.open(agent.id, { command: harness.binary, args, cwd: dir, env, cols, rows });
     this.launches.set(agent.id, { continued, at: Date.now() });
+    let push = this.interactivePushFor?.(agent);
+    if (agent.harness === "agy" && agent.lastSessionId) {
+      const session = this.manager.store.get(agent.id);
+      const sid = agent.lastSessionId;
+      if (session) {
+        const delivery = createAgyInteractiveDelivery({
+          sessionId: sid,
+          isLive: () => this.manager.store.get(agent.id) === session && !session.exited && this.registry.get(agent.id)?.lastSessionId === sid,
+          isIdle: () => {
+            const fresh = this.registry.get(agent.id);
+            return fresh?.harness === "agy" && fresh.archivedAt === null && fresh.status === "idle";
+          },
+          readTranscript: () => readAgyTranscript(sid),
+          write: data => session.pty.write(data),
+        });
+        session.onUserInput = data => delivery.onUserInput(data);
+        this.agyDelivery.set(agent.id, delivery);
+        push = delivery.push;
+      }
+    }
     // A live PTY is the interactive transport — tell the coordinator (it publishes
     // `executionState = interactive`). Synchronous, so it's set before the agent's MCP
     // could poll `/wake-stream`. A push-transport harness (codex) also hands over its
     // delivery closure here; channel harnesses (claude) pass none.
-    this.wake.onInteractiveUp(agent.id, this.interactivePushFor?.(agent));
+    this.wake.onInteractiveUp(agent.id, push);
     // Engine-minted sessions: discover + persist the thread the TUI just created
     // (and deliver the kickoff into it). Fire-and-forget by design.
     if (starting && harness.adoptInteractiveSession) {

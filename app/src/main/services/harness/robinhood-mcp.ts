@@ -50,3 +50,30 @@ export function claudeConfigHasRobinhood(json: string): boolean {
 export function codexConfigHasRobinhood(toml: string): boolean {
   return toml.includes(ROBINHOOD_MCP_HOST);
 }
+
+/**
+ * Antigravity CLI's (`agy`) global MCP config lives at `~/.gemini/config/mcp_config.json`
+ * with an `mcpServers` map. A server matches if its URL points to `agent.robinhood.com`,
+ * its key is `robinhood` / `robinhood-trading`, or its stdio command bridges Robinhood MCP.
+ */
+export function agyConfigHasRobinhood(json: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    const servers = (
+      parsed as {
+        mcpServers?: Record<string, { url?: string; serverUrl?: string; command?: string }>;
+      }
+    )?.mcpServers;
+    if (!servers || typeof servers !== "object") return false;
+    return Object.entries(servers).some(
+      ([name, s]) =>
+        name === "robinhood" ||
+        name === "robinhood-trading" ||
+        (s?.url ?? "").includes(ROBINHOOD_MCP_HOST) ||
+        (s?.serverUrl ?? "").includes(ROBINHOOD_MCP_HOST) ||
+        (s?.command ?? "").includes("robinhood"),
+    );
+  } catch {
+    return false;
+  }
+}

@@ -11,8 +11,18 @@ export type ApprovalMode = z.infer<typeof ApprovalMode>;
  * behavior (spawn, wake transport, scaffold, gate wiring) is resolved through the
  * harness seam (`services/harness/`) — nothing outside it may branch on this id.
  */
-export const HarnessId = z.enum(["claude", "codex"]);
+export const HarnessId = z.enum(["claude", "codex", "agy"]);
 export type HarnessId = z.infer<typeof HarnessId>;
+
+export const HARNESS_LABELS: Record<HarnessId, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  agy: "Antigravity",
+};
+
+export function harnessLabel(id: HarnessId): string {
+  return HARNESS_LABELS[id] ?? "Claude Code";
+}
 
 /**
  * Runtime execution context for an agent's single `claude` writer (orthogonal to

@@ -105,7 +105,13 @@ export type HeadlessExit = (
  * Resolves `true` once the wake is confirmed accepted (advance-on-ack — the head may
  * then be shifted), `false`/reject when delivery failed and should be retried.
  */
-export type InteractivePush = (prompt: string) => Promise<boolean>;
+export type InteractivePushResult = boolean | {
+  accepted: true;
+  /** Native completion correlated to this exact accepted turn. A fast Stop hook
+   * may precede the asynchronous acceptance acknowledgment. */
+  completion?: Promise<WakeResult | undefined>;
+};
+export type InteractivePush = (prompt: string) => Promise<InteractivePushResult>;
 
 /** How a headless `-p` run terminated, reported by the strategy to the coordinator:
  *  - `ok`         — the child exited (clean, or killed by the max-runtime backstop)

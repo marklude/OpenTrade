@@ -112,7 +112,7 @@ function Stepper({ current }: { current: Step }) {
 
 function ClaudeStep({ onNext }: { onNext: () => void }) {
   const probe = trpc.onboarding.harnesses.useQuery();
-  const anyFound = probe.data?.claude.found || probe.data?.codex.found;
+  const anyFound = probe.data?.claude.found || probe.data?.codex.found || probe.data?.agy.found;
 
   const row = (label: string, r?: { found: boolean; version: string | null }) => (
     <div className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm">
@@ -141,8 +141,9 @@ function ClaudeStep({ onNext }: { onNext: () => void }) {
           <h2 className="text-sm font-medium">Agent CLI</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Each agent runs as a coding-agent session in an embedded terminal. At least one
-            supported CLI — <code className="rounded bg-muted px-1">claude</code> or{" "}
-            <code className="rounded bg-muted px-1">codex</code> — must be installed.
+            supported CLI — <code className="rounded bg-muted px-1">claude</code>,{" "}
+            <code className="rounded bg-muted px-1">codex</code>, or{" "}
+            <code className="rounded bg-muted px-1">agy</code> — must be installed.
           </p>
         </div>
       </div>
@@ -150,6 +151,7 @@ function ClaudeStep({ onNext }: { onNext: () => void }) {
       <div className="flex flex-col gap-2">
         {row("Claude Code", probe.data?.claude)}
         {row("Codex", probe.data?.codex)}
+        {row("Antigravity", probe.data?.agy)}
       </div>
 
       {!anyFound && !probe.isLoading && (
@@ -272,6 +274,7 @@ function RobinhoodMcpCheck() {
   const clis = [
     { label: "Claude Code", ...mcp.data?.claude },
     { label: "Codex", ...mcp.data?.codex },
+    { label: "Antigravity", ...mcp.data?.agy },
   ];
   // Gated on a settled query: mid-load every `configured` is undefined, which
   // would flash the link block before we know anything is actually missing.

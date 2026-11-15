@@ -11,6 +11,7 @@ import type {
   HeadlessRunInfo,
   HeadlessWakeStrategy,
   InteractivePush,
+  InteractivePushResult,
   PendingWake,
   SchedulerControl,
   WakeResult,
@@ -310,7 +311,8 @@ class AgentWriter {
     );
   }
 
-  private pushSettled(push: InteractivePush, head: PendingWake, ok: boolean): void {
+  private pushSettled(push: InteractivePush, head: PendingWake, result: InteractivePushResult): void {
+    const ok = result === true || (typeof result === "object" && result.accepted === true);
     // A newer push replaced this one (respawn-while-interactive installed a fresh push
     // via onInteractiveUp): the current in-flight state belongs to THAT push, so a stale
     // settle must not clear its `pushInFlight` (which would let a duplicate delivery
@@ -323,7 +325,15 @@ class AgentWriter {
     if (ok) {
       if (this.pending[0] === head) {
         this.pending.shift();
-        this.deliveredLive(head); // the app-server accepted the turn
+        this.deliveredLive(head); // the native transport accepted the turn
+        if (typeof result === "object" && result.completion) {
+          // Record acceptance before observing even an already-resolved native
+          // completion, and settle only this head. A late result cannot finish
+          // a subsequent wake or repeat a Stop-hook history update.
+          void result.completion.then(outcome => {
+            if (outcome) this.settleLiveWake(head, outcome);
+          }, () => {}); // no native completion proof: retain ordinary hook/exit handling
+        }
       }
       this.serveInteractive(); // deliver the next queued wake, if any
       return;
@@ -531,6 +541,13 @@ class AgentWriter {
   onTurnFailed(failureCategory: WakeFailureCategory): void {
     this.settleLive({ outcome: "failed", failureReason: "api_error", failureCategory });
     if (this.state === "HEADLESS_RUNNING") this.headApiError = failureCategory;
+  }
+
+  private settleLiveWake(wake: PendingWake, result: WakeResult): void {
+    const index = this.liveWakes.indexOf(wake);
+    if (index < 0) return;
+    this.liveWakes.splice(index, 1);
+    this.recordFinished(wake, result);
   }
 
   private settleLive(result: WakeResult): void {

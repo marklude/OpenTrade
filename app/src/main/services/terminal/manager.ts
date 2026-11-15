@@ -1,7 +1,32 @@
 import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import * as pty from "node-pty";
+import { OPENTRADE_HOME } from "../../db/client";
 import type { SessionInfo } from "../../pty-daemon/protocol";
 import { SessionStore } from "../../pty-daemon/session-store";
+
+function resolveExecutable(cmd: string): string {
+  if (cmd.includes("/")) return cmd;
+  const home = homedir();
+  const searchDirs = [
+    join(OPENTRADE_HOME, "bin"),
+    join(home, ".local", "bin"),
+    join(home, ".volta", "bin"),
+    join(home, ".bun", "bin"),
+    join(home, "bin"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+  ];
+  for (const d of searchDirs) {
+    const full = join(d, cmd);
+    if (existsSync(full)) return full;
+  }
+  return cmd;
+}
 
 /** What to launch for a session (the `claude` PTY). */
 export interface SpawnMeta {
@@ -43,7 +68,8 @@ export class TerminalManager extends EventEmitter {
     if (existing && !existing.exited) return; // never double-spawn
     if (existing) this.store.delete(id);
 
-    const proc = pty.spawn(meta.command, meta.args, {
+    const binary = resolveExecutable(meta.command);
+    const proc = pty.spawn(binary, meta.args, {
       name: "xterm-256color",
       cols: meta.cols,
       rows: meta.rows,

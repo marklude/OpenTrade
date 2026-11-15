@@ -789,3 +789,49 @@ describe("WakeCoordinator — History recording (wakeStarted / wakeFinished)", (
     expect(started).toEqual([{ prompt: "p1", background: false }]);
   });
 });
+
+
+describe("WakeCoordinator — correlated native push completion", () => {
+  test("native success settles after acceptance even when Stop preceded acknowledgment", async () => {
+    const { coord } = make(); const rec = makeRecorder(); coord.setScheduler(rec.sched);
+    let accept!: (value: { accepted: true; completion: Promise<WakeResult | undefined> }) => void;
+    coord.onInteractiveUp("a", () => new Promise(resolve => { accept = resolve; }));
+    const wake = w("fast native success"); coord.enqueue("a", wake);
+    coord.onTurnEnded("a");
+    expect(rec.started).toHaveLength(0); expect(rec.finished).toHaveLength(0);
+    accept({ accepted: true, completion: Promise.resolve({ outcome: "succeeded" }) }); await tick();
+    expect(rec.started).toEqual([{ prompt: wake.prompt, background: false }]);
+    expect(rec.finished).toEqual([{ wakeId: wake.id, result: { outcome: "succeeded" } }]);
+    coord.onTurnEnded("a"); expect(rec.finished).toHaveLength(1); coord.stopAll();
+  });
+  test("native failure settles after acceptance even when StopFailure preceded acknowledgment", async () => {
+    const { coord } = make(); const rec = makeRecorder(); coord.setScheduler(rec.sched);
+    let accept!: (value: { accepted: true; completion: Promise<WakeResult | undefined> }) => void;
+    coord.onInteractiveUp("a", () => new Promise(resolve => { accept = resolve; }));
+    const wake = w("fast native error"); coord.enqueue("a", wake);
+    coord.onTurnFailed("a", "other");
+    accept({ accepted: true, completion: Promise.resolve({ outcome: "failed", failureReason: "api_error" }) }); await tick();
+    expect(rec.finished).toEqual([{ wakeId: wake.id, result: { outcome: "failed", failureReason: "api_error" } }]);
+    coord.onTurnEnded("a"); expect(rec.finished).toHaveLength(1); coord.stopAll();
+  });
+  test("a late native completion settles only its own wake and never the next one", async () => {
+    const { coord } = make(); const rec = makeRecorder(); coord.setScheduler(rec.sched);
+    const endings: Array<(value: WakeResult | undefined) => void> = [];
+    coord.onInteractiveUp("a", async () => ({ accepted: true as const, completion: new Promise(resolve => endings.push(resolve)) }));
+    const first = w("first"); const second = w("second");
+    coord.enqueue("a", first); coord.enqueue("a", second); await tick();
+    expect(rec.started).toHaveLength(2);
+    endings[0]({ outcome: "succeeded" }); await tick();
+    expect(rec.finished).toEqual([{ wakeId: first.id, result: { outcome: "succeeded" } }]);
+    coord.onTurnEnded("a"); expect(rec.finished).toHaveLength(2);
+    expect(rec.finished[1].wakeId).toBe(second.id);
+    endings[1]({ outcome: "succeeded" }); await tick(); expect(rec.finished).toHaveLength(2); coord.stopAll();
+  });
+  test("unavailable native completion cannot invent success and leaves normal hooks intact", async () => {
+    const { coord } = make(); const rec = makeRecorder(); coord.setScheduler(rec.sched);
+    coord.onInteractiveUp("a", async () => ({ accepted: true as const, completion: Promise.resolve(undefined) }));
+    const wake = w("unavailable receipt"); coord.enqueue("a", wake); await tick();
+    expect(rec.started).toHaveLength(1); expect(rec.finished).toHaveLength(0);
+    coord.onTurnEnded("a"); expect(rec.finished).toEqual([{ wakeId: wake.id, result: { outcome: "succeeded" } }]); coord.stopAll();
+  });
+});

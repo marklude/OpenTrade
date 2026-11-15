@@ -13,10 +13,26 @@ import { cn } from "../../lib/utils";
  * svg/openai-light.svg).
  */
 export function HarnessGlyph({ harness, className }: { harness: HarnessId; className?: string }) {
-  return harness === "codex" ? (
-    <CodexGlyph className={className} />
-  ) : (
-    <ClaudeGlyph className={className} />
+  if (harness === "codex") return <CodexGlyph className={className} />;
+  if (harness === "agy") return <AgyGlyph className={className} />;
+  return <ClaudeGlyph className={className} />;
+}
+
+/** Antigravity (Google DeepMind) — four-point Gemini/Antigravity star mark in brand blue. */
+function AgyGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className={cn("size-3.5", className)}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M12 1.5C12.35 6.85 17.15 11.65 22.5 12C17.15 12.35 12.35 17.15 12 22.5C11.65 17.15 6.85 12.35 1.5 12C6.85 11.65 11.65 6.85 12 1.5Z"
+        fill="#4285F4"
+      />
+    </svg>
   );
 }
 

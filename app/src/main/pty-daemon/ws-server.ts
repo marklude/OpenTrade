@@ -87,6 +87,7 @@ export class TerminalWsServer {
       const s = this.store.get(id);
       if (!s || s.exited) return;
       if (msg.type === "input") {
+        s.onUserInput?.(msg.data);
         s.pty.write(msg.data);
       } else if (msg.type === "resize") {
         try {

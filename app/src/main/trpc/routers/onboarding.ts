@@ -37,13 +37,14 @@ export const onboardingRouter = router({
   harnesses: publicProcedure.query(async () => ({
     claude: await probeClaude(),
     codex: await probeCli("codex"),
+    agy: await probeCli("agy"),
   })),
 
   /**
    * Is Robinhood's Agentic Trading MCP registered in each agent CLI's config?
    * (Onboarding step 2.) Agents place orders through this MCP, so a user who
    * never registered it gets an agent that can reason but not trade — the wizard
-   * says so up front and links Robinhood's connect guide. Two file reads, no
+   * says so up front and links Robinhood's connect guide. File reads only, no
    * CLI launch: this reports what's configured, not whether it's authenticated.
    *
    * We return only the verdict and the guide link — never the `mcp add` commands.
@@ -53,6 +54,7 @@ export const onboardingRouter = router({
   robinhoodMcp: publicProcedure.query(() => ({
     claude: { configured: mcpConfigured("claude") },
     codex: { configured: mcpConfigured("codex") },
+    agy: { configured: mcpConfigured("agy") },
     connectUrl: ROBINHOOD_MCP_CONNECT_URL,
   })),
 
